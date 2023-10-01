@@ -1,0 +1,8 @@
+﻿CREATE TABLE [dbo].[POIs] (
+    [POIId] INT IDENTITY (1,1) PRIMARY KEY,
+    [Address] VARCHAR (300) NOT NULL,
+	[Point] VARCHAR (100) NOT NULL,
+    [UserId]  INT NOT NULL,
+    FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users] ([Id]) ON DELETE CASCADE
+);
+

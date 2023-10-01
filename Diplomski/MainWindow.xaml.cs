@@ -26,6 +26,7 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using Windows.System;
 using System.Net;
 using System.Xml.Linq;
+using System.Net.Sockets;
 
 namespace Diplomski
 {
@@ -34,10 +35,12 @@ namespace Diplomski
 	/// </summary>
 	public partial class MainWindow : Window
 	{
+		string APIKey = "";
 		readonly ScaleTransform scale = new ScaleTransform();
 		PointCollection points = new PointCollection();
 		OutageType outageType;
 		UserPermissions currentUserPermissions = UserPermissions.User;
+		TcpClient tcpClient;
 
 		Point topLeftPoint = new Point(45.278616, 19.794296);
 		Point bottomRightPoint = new Point(45.232626, 19.895024);
@@ -61,7 +64,7 @@ namespace Diplomski
 		List<POI> pOIs = new List<POI>();
 		List<Outage> outages = new List<Outage>();
 
-		public MainWindow(UserPermissions userPermissions)
+		public MainWindow(UserPermissions userPermissions, TcpClient tcpClient)
 		{
 			InitializeComponent();
 			canvas.LayoutTransform = scale;
@@ -69,6 +72,7 @@ namespace Diplomski
 			pois.ItemsSource = pOIs;
 			currentUserPermissions = userPermissions;
 			HideUnnecessaryActions();
+			this.tcpClient = tcpClient;
 		}
 
 		private void HideUnnecessaryActions()
@@ -184,7 +188,7 @@ namespace Diplomski
 				{
 					Point currentLocation = ConvertPointToGeo(currentPoint);
 					string latlng = currentLocation.Y + "," + currentLocation.X;
-					string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&latlng={0}&sensor=false", Uri.EscapeDataString(latlng), API_KEY_HERE);
+					string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&latlng={0}&sensor=false", Uri.EscapeDataString(latlng), APIKey);
 
 					WebRequest request = WebRequest.Create(requestUri);
 					WebResponse response = request.GetResponse();
@@ -206,7 +210,7 @@ namespace Diplomski
 		private void AddressButton_Click(object sender, RoutedEventArgs e)
 		{
 			string address = addressBox.Text + ", Novi Sad";
-			string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&address={0}&sensor=false", Uri.EscapeDataString(address), API_KEY_HERE);
+			string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&address={0}&sensor=false", Uri.EscapeDataString(address), APIKey);
 
 			WebRequest request = WebRequest.Create(requestUri);
 			WebResponse response = request.GetResponse();
@@ -233,7 +237,8 @@ namespace Diplomski
 		private Point ConvertGeoToPoint(double lat, double lng)
 		{ 
 			Point point = new Point(lat, lng);
-			return new Point(Math.Abs((point.Y - topLeftPoint.Y) / (bottomRightPoint.Y - topLeftPoint.Y) * canvas.Width), Math.Abs((point.X - topLeftPoint.X) / (topLeftPoint.X - bottomRightPoint.X) * canvas.Height));
+			return new Point(Math.Abs((point.Y - topLeftPoint.Y) / (bottomRightPoint.Y - topLeftPoint.Y) * canvas.Width), 
+				Math.Abs((point.X - topLeftPoint.X) / (topLeftPoint.X - bottomRightPoint.X) * canvas.Height));
 		}
 
 		private Point ConvertPointToGeo(Point point)
@@ -305,10 +310,16 @@ namespace Diplomski
 
 		private void Button_Click(object sender, RoutedEventArgs e)
 		{
-			Login login = new Login();
+			Login login = new Login(tcpClient);
 			login.Show();
 			Close();
         }
-    }
+
+		protected override void OnClosed(EventArgs e)
+		{
+			tcpClient.Close();
+			base.OnClosed(e);
+		}
+	}
 
 }
