@@ -23,6 +23,9 @@ using System.Windows.Shapes;
 using Common;
 using System.Data;
 using Microsoft.Toolkit.Uwp.Notifications;
+using Windows.System;
+using System.Net;
+using System.Xml.Linq;
 
 namespace Diplomski
 {
@@ -34,6 +37,10 @@ namespace Diplomski
 		readonly ScaleTransform scale = new ScaleTransform();
 		PointCollection points = new PointCollection();
 		OutageType outageType;
+		UserPermissions currentUserPermissions = UserPermissions.User;
+
+		Point topLeftPoint = new Point(45.278616, 19.794296);
+		Point bottomRightPoint = new Point(45.232626, 19.895024);
 
 		List<SolidColorBrush> colors = new List<SolidColorBrush>
 		{
@@ -44,6 +51,7 @@ namespace Diplomski
 
 		bool mapPointSet = false;
 		Point currentPoint = new Point();
+		string currentAddress = "tempAddress";
 		Rectangle mapPin = new Rectangle 
 		{
 			Width = 33,
@@ -53,12 +61,57 @@ namespace Diplomski
 		List<POI> pOIs = new List<POI>();
 		List<Outage> outages = new List<Outage>();
 
-		public MainWindow()
+		public MainWindow(UserPermissions userPermissions)
 		{
 			InitializeComponent();
 			canvas.LayoutTransform = scale;
 			DataContext = this;
 			pois.ItemsSource = pOIs;
+			currentUserPermissions = userPermissions;
+			HideUnnecessaryActions();
+		}
+
+		private void HideUnnecessaryActions()
+		{
+			if(currentUserPermissions == UserPermissions.User)
+			{
+				actions.Children.Remove(AddEOutage);
+				actions.Children.Remove(AddWOutage);
+				actions.Children.Remove(AddTOutage);
+				dates.Children.Remove(OutageStartDateTime);
+				dates.Children.Remove(OutageEndDateTime);
+				dates.Children.Remove(OutageStart);
+				dates.Children.Remove(OutageEnd);
+			}
+
+			if(currentUserPermissions > 0)
+			{
+				actions.Children.Remove(addPOI);
+				actions.Children.Remove(addressButton);
+				actions.Children.Remove(addressBox);
+				actions.Children.Remove(checkPOIs);
+				dates.Children.Remove(pointsOfInterest);
+				dates.Children.Remove(pois);
+			}
+
+			if(currentUserPermissions == UserPermissions.AdminElectricity)
+			{
+				actions.Children.Remove(AddWOutage);
+				actions.Children.Remove(AddTOutage);
+			}
+
+			if (currentUserPermissions == UserPermissions.AdminWater)
+			{
+				actions.Children.Remove(AddEOutage);
+				actions.Children.Remove(AddTOutage);
+			}
+
+			if (currentUserPermissions == UserPermissions.AdminTraffic)
+			{
+				actions.Children.Remove(AddEOutage);
+				actions.Children.Remove(AddWOutage);
+			}
+			return;
 		}
 
 		private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -69,6 +122,12 @@ namespace Diplomski
 
 		private void DrawPolygon()
 		{
+			if(!OutageStartDateTime.Value.HasValue || !OutageEndDateTime.Value.HasValue) 
+			{
+				MessageBox.Show("Please input start and end time of outage.");
+				return;
+			}
+
 			Polygon polygon = new Polygon
 			{
 				Fill = colors[(int)outageType],
@@ -95,6 +154,7 @@ namespace Diplomski
 			mapPointSet = true;
 			currentPoint.X = e.GetPosition(canvas).X;
 			currentPoint.Y = e.GetPosition(canvas).Y;
+			currentAddress = "tempAddress";
 			canvas.Children.Remove(mapPin);
 		}
 
@@ -120,21 +180,65 @@ namespace Diplomski
 		{
 			if (mapPointSet)
 			{
-				pOIs.Add(new POI(currentPoint, "TempAddress"));
+				if(currentAddress == "tempAddress")
+				{
+					Point currentLocation = ConvertPointToGeo(currentPoint);
+					string latlng = currentLocation.Y + "," + currentLocation.X;
+					string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&latlng={0}&sensor=false", Uri.EscapeDataString(latlng), API_KEY_HERE);
+
+					WebRequest request = WebRequest.Create(requestUri);
+					WebResponse response = request.GetResponse();
+					XDocument xdoc = XDocument.Load(response.GetResponseStream());
+
+					XElement result = xdoc.Element("GeocodeResponse").Element("result");
+					XElement address = result.Element("formatted_address");
+
+					currentAddress = address.Value.Split(',')[0];
+				}
+				pOIs.Add(new POI(currentPoint, currentAddress));
 				mapPointSet = false;
 				pois.Items.Refresh();
+				currentAddress = "tempAddress";
 				canvas.Children.Remove(mapPin);
 			}
 		}
 
 		private void AddressButton_Click(object sender, RoutedEventArgs e)
 		{
+			string address = addressBox.Text + ", Novi Sad";
+			string requestUri = string.Format("https://maps.googleapis.com/maps/api/geocode/xml?key={1}&address={0}&sensor=false", Uri.EscapeDataString(address), API_KEY_HERE);
+
+			WebRequest request = WebRequest.Create(requestUri);
+			WebResponse response = request.GetResponse();
+			XDocument xdoc = XDocument.Load(response.GetResponseStream());
+
+			XElement result = xdoc.Element("GeocodeResponse").Element("result");
+			XElement locationElement = result.Element("geometry").Element("location");
+			XElement lat = locationElement.Element("lat");
+			XElement lng = locationElement.Element("lng");
+
+			Point location = ConvertGeoToPoint((double)lat, (double)lng);
+
+			MessageBox.Show("X:" + location.X + "\nY:" + location.Y);
+			canvas.Children.Remove(mapPin);
 			mapPointSet = true;
-			currentPoint.X = 750;
-			currentPoint.Y = 450;
+			currentAddress = address;
+			currentPoint.X = location.X;
+			currentPoint.Y = location.Y;
 			mapPin.SetValue(Canvas.LeftProperty, currentPoint.X - 16);
-			mapPin.SetValue(Canvas.TopProperty, currentPoint.Y - 24);
+			mapPin.SetValue(Canvas.TopProperty, currentPoint.Y - 49);
 			canvas.Children.Add(mapPin);
+		}
+
+		private Point ConvertGeoToPoint(double lat, double lng)
+		{ 
+			Point point = new Point(lat, lng);
+			return new Point(Math.Abs((point.Y - topLeftPoint.Y) / (bottomRightPoint.Y - topLeftPoint.Y) * canvas.Width), Math.Abs((point.X - topLeftPoint.X) / (topLeftPoint.X - bottomRightPoint.X) * canvas.Height));
+		}
+
+		private Point ConvertPointToGeo(Point point)
+		{
+			return new Point(point.X / canvas.Width * Math.Abs(bottomRightPoint.Y - topLeftPoint.Y) + topLeftPoint.Y, topLeftPoint.X - point.Y / canvas.Height * Math.Abs(topLeftPoint.X - bottomRightPoint.X));
 		}
 
 		private bool IsInPolygon(Point[] poly, Point p)
@@ -180,6 +284,10 @@ namespace Diplomski
 
 		private void CheckPOIs(object sender, RoutedEventArgs e)
 		{
+			if (!InterestDateTime.Value.HasValue)
+			{
+				return;
+			}
 			foreach (var POI in pOIs)
 			{
 				foreach (var outage in outages)
@@ -194,6 +302,13 @@ namespace Diplomski
 				}
 			}
 		}
-	}
+
+		private void Button_Click(object sender, RoutedEventArgs e)
+		{
+			Login login = new Login();
+			login.Show();
+			Close();
+        }
+    }
 
 }

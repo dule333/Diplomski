@@ -13,26 +13,27 @@
 			<RowDefinition Height="*"/>
 		</Grid.RowDefinitions>
 		
-		<DockPanel LastChildFill="False">
+		<DockPanel x:Name="actions" LastChildFill="False">
 			<Slider Maximum="10" Minimum="0" SmallChange="0.5" Value="1" TickPlacement="BottomRight" Width="100" ValueChanged="Slider_ValueChanged"/>
-			<Button Content="Add Electricity Outage" Click="ElectricityOutage"/>
-			<Button Content="Add Water Outage" Click="WaterOutage"/>
-			<Button Content="Add Traffic Outage" Click="TrafficOutage"/>
-			<Button Content="Add POI" Click="AddPOI"/>
+			<Button x:Name="AddEOutage" Content="Add Electricity Outage" Click="ElectricityOutage"/>
+			<Button x:Name="AddWOutage" Content="Add Water Outage" Click="WaterOutage"/>
+			<Button x:Name="AddTOutage" Content="Add Traffic Outage" Click="TrafficOutage"/>
+			<Button x:Name="addPOI" Content="Add POI" Click="AddPOI"/>
 			<TextBox x:Name="addressBox" Width="250"/>
 			<Button x:Name="addressButton" Content="Find Address" Click="AddressButton_Click"/>
-			<Button Content="Check POIs" Click="CheckPOIs"/>
+			<Button x:Name="checkPOIs" Content="Check POIs" Click="CheckPOIs"/>
+			<Button Content="Logout" Click="Button_Click"/>
 		</DockPanel>
 
 		<DockPanel LastChildFill="False" Grid.Row="1">
-			<StackPanel>
-				<Label Content="Date of interest"/>
+			<StackPanel x:Name="dates">
+				<Label x:Name="OutageDate" Content="Date of interest"/>
 				<xctk:DateTimePicker x:Name="InterestDateTime"/>
-				<Label Content="Outage start"/>
+				<Label x:Name="OutageStart" Content="Outage start"/>
 				<xctk:DateTimePicker x:Name="OutageStartDateTime"/>
-				<Label Content="Outage end"/>
+				<Label x:Name="OutageEnd" Content="Outage end" Width="200"/>
 				<xctk:DateTimePicker x:Name="OutageEndDateTime"/>
-				<Label Content="Points of interest"/>
+				<Label x:Name="pointsOfInterest" Content="Points of interest"/>
 				<ListBox x:Name="pois" Width="200">
 
 				</ListBox>
