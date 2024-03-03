@@ -1,21 +1,8 @@
 ﻿using Common;
-using GoogleMapsApi.Entities.Elevation.Response;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Interop;
-using System.Windows.Markup;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace Diplomski
 {
@@ -24,6 +11,7 @@ namespace Diplomski
 	/// </summary>
 	public partial class Login : Window
 	{
+		bool forceClosed = true;
 		TcpClient tcpClient;
 		public Login()
 		{
@@ -38,43 +26,35 @@ namespace Diplomski
 
 		}
 
-		private string SendAndReceiveMessage(string method, string parameters)
-		{
-			string result = null;
-			var stream = tcpClient.GetStream();
-
-			string message = method + "|" + parameters;
-			byte[] payload = Encoding.ASCII.GetBytes(message);
-			stream.Write(payload, 0, payload.Length);
-
-			Byte[] bytes = new Byte[256];
-			int i = stream.Read(bytes, 0, bytes.Length);
-			result = Encoding.ASCII.GetString(bytes, 0, i);
-			return result;
-		}
-
 		private void loginButton_Click(object sender, RoutedEventArgs e)
 		{
-			int userPerms = Int32.Parse(SendAndReceiveMessage("l", username.Text + "|" + password.Password));
-			if (UserPermissions.AdminUser == (UserPermissions)userPerms)
+			try
 			{
-				AdminPanel panel = new AdminPanel(tcpClient);
-				panel.Show();
-				Close(); 
-				return;
-			}
+				string[] results = ServerCommunication.SendAndReceiveMessage(tcpClient, "l", username.Text + "|" + password.Password).Split('|');
+				UserPermissions userPermissions = (UserPermissions)Int32.Parse(results[0]);
+				if (UserPermissions.AdminUser == userPermissions)
+				{
+					AdminPanel panel = new AdminPanel(tcpClient);
+					panel.Show();
+					forceClosed = false;
+					Close();
+					return;
+				}
 
-			if(userPerms >= 0 && userPerms < 5)
+				if ((int)userPermissions >= 0 && (int)userPermissions < 5)
+				{
+					MainWindow mainWindow = new MainWindow(userPermissions, tcpClient, Int32.Parse(results[1]));
+					mainWindow.Show();
+					forceClosed = false;
+					Close();
+					return;
+				}
+				MessageBox.Show("Wrong username or password");
+			}
+			catch
 			{
-				MainWindow mainWindow = new MainWindow((UserPermissions)userPerms, tcpClient);
-				mainWindow.Show();
-				Close();
-				return;
+				MessageBox.Show("Wrong username or password.");
 			}
-
-			MessageBox.Show("Wrong username or password");
-			return;
-
 		}
 
 		private void registerButton_Click(object sender, RoutedEventArgs e)
@@ -85,10 +65,8 @@ namespace Diplomski
 			byte[] payload = Encoding.ASCII.GetBytes(message);
 			stream.Write(payload, 0, payload.Length);
 
-			MainWindow mainWindow = new MainWindow(UserPermissions.User, tcpClient);
-			mainWindow.Show();
-			Close();
-		}
+			MessageBox.Show("Successfully registered. Please login to continue using the program.");
+        }
 
 		private void quitButton_Click(object sender, RoutedEventArgs e)
 		{
@@ -98,7 +76,8 @@ namespace Diplomski
 
 		protected override void OnClosed(EventArgs e)
 		{
-			tcpClient.Close();
+			if(forceClosed)
+				tcpClient.Close();
 			base.OnClosed(e);
 		}
 	}

@@ -22,6 +22,7 @@ namespace Diplomski
 	public partial class AdminPanel : Window
 	{
 		TcpClient tcpClient;
+		bool forceClosed = true;
 		public AdminPanel(TcpClient tcpClient)
 		{
 			InitializeComponent();
@@ -54,12 +55,14 @@ namespace Diplomski
 		{
 			Login login = new Login(tcpClient);
 			login.Show();
+			forceClosed = false;
 			Close();
 		}
 
 		protected override void OnClosed(EventArgs e)
 		{
-			tcpClient.Close();
+			if(forceClosed)
+				tcpClient.Close();
 			base.OnClosed(e);
 		}
 	}

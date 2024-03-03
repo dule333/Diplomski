@@ -1,29 +1,15 @@
-﻿using GoogleMapsApi.Entities.Common;
-using GoogleMapsApi.Entities.Directions.Request;
-using GoogleMapsApi.Entities.Directions.Response;
-using GoogleMapsApi.Entities.Geocoding.Request;
-using GoogleMapsApi.Entities.Geocoding.Response;
-using GoogleMapsApi.StaticMaps.Entities;
-using GoogleMapsApi.StaticMaps;
-using GoogleMapsApi;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Common;
-using System.Data;
 using Microsoft.Toolkit.Uwp.Notifications;
-using Windows.System;
 using System.Net;
 using System.Xml.Linq;
 using System.Net.Sockets;
@@ -35,12 +21,14 @@ namespace Diplomski
 	/// </summary>
 	public partial class MainWindow : Window
 	{
-		string APIKey = "";
+		readonly string APIKey = "";
 		readonly ScaleTransform scale = new ScaleTransform();
 		PointCollection points = new PointCollection();
 		OutageType outageType;
 		UserPermissions currentUserPermissions = UserPermissions.User;
 		TcpClient tcpClient;
+		int userId = -1;
+		bool forceClosed = true;
 
 		Point topLeftPoint = new Point(45.278616, 19.794296);
 		Point bottomRightPoint = new Point(45.232626, 19.895024);
@@ -64,7 +52,7 @@ namespace Diplomski
 		List<POI> pOIs = new List<POI>();
 		List<Outage> outages = new List<Outage>();
 
-		public MainWindow(UserPermissions userPermissions, TcpClient tcpClient)
+		public MainWindow(UserPermissions userPermissions, TcpClient tcpClient, int userId)
 		{
 			InitializeComponent();
 			canvas.LayoutTransform = scale;
@@ -73,6 +61,7 @@ namespace Diplomski
 			currentUserPermissions = userPermissions;
 			HideUnnecessaryActions();
 			this.tcpClient = tcpClient;
+			this.userId = userId;
 		}
 
 		private void HideUnnecessaryActions()
@@ -124,6 +113,17 @@ namespace Diplomski
 			scale.ScaleY = ((Slider)sender).Value;
 		}
 
+		private void WriteOutage(Outage outage)
+		{
+			var stream = tcpClient.GetStream();
+
+			string message = "O|" + outage.ToString();
+			byte[] payload = Encoding.ASCII.GetBytes(message);
+			stream.Write(payload, 0, payload.Length);
+
+			MessageBox.Show("Created an outage.");
+		}
+
 		private void DrawPolygon()
 		{
 			if(!OutageStartDateTime.Value.HasValue || !OutageEndDateTime.Value.HasValue) 
@@ -143,7 +143,12 @@ namespace Diplomski
 			};
 			points.Clear();
 
-			outages.Add(new Outage(polygon.Points.ToArray(), OutageStartDateTime.Value.Value, OutageEndDateTime.Value.Value, outageType));
+			Outage outage = new Outage(-1, polygon.Points.ToArray(), OutageStartDateTime.Value.Value, OutageEndDateTime.Value.Value, outageType);
+
+			outages.Add(outage);
+
+			WriteOutage(outage);
+
 			canvas.Children.Add(polygon);
 		}
 
@@ -297,7 +302,7 @@ namespace Diplomski
 			{
 				foreach (var outage in outages)
 				{
-					if (IsInPolygon(outage.Area, POI.Location) && InterestDateTime.Value.Value < outage.OutageEnd && InterestDateTime.Value.Value > outage.OutageStart)
+					if (InterestDateTime.Value.Value < outage.OutageEnd && InterestDateTime.Value.Value > outage.OutageStart && IsInPolygon(outage.Area, POI.Location))
 					{
 						new ToastContentBuilder()
 							.AddText("Issue with POI")
@@ -312,12 +317,14 @@ namespace Diplomski
 		{
 			Login login = new Login(tcpClient);
 			login.Show();
+			forceClosed = false;
 			Close();
         }
 
 		protected override void OnClosed(EventArgs e)
 		{
-			tcpClient.Close();
+			if(forceClosed)
+				tcpClient.Close();
 			base.OnClosed(e);
 		}
 	}

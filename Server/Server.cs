@@ -41,28 +41,56 @@ namespace Server
 			}
 		}
 
-		private static int Login(string username, string password)
+		private static string Login(string username, string password)
 		{
+			string result = "";
 			if (username != null && password != null)
 			{
 				try
 				{
-					String commandText = "SELECT UserType FROM Users WHERE Username = '" + username + "' AND Password = '" + password + "'";
+					String commandText = "SELECT UserType,Id FROM Users WHERE Username = '" + username + "' AND Password = '" + password + "'";
 					SqlCommand command = new SqlCommand(commandText, connection);
 
 					connection.Open();
-					int userType = (int)(command.ExecuteScalar() ?? -1);
+					using(var reader = command.ExecuteReader())
+					{
+						reader.Read();
+						result = reader[0] + "|" + reader[1];
+					}
 					connection.Close();
-					return userType;
+					
 				}
 				catch (Exception e)
 				{
 					Console.WriteLine(e.Message);
-					return -1;
 				}
 			}
 
-			return -1;
+			return result;
+		}
+
+		private static void CreateOutage(string points, string startTime, string endTime, string type)
+		{
+			if(points != null && startTime != null && type != null)
+			{
+				try
+				{
+					Console.WriteLine("Before insert");
+					String commandText = "INSERT INTO [dbo].Outages (OutagePoints, OutageStartTime, OutageEndTime, OutageType)" +
+						"VALUES ('" + points + "', '" + startTime + "', '" + endTime + "', '" + type + "')";
+					SqlCommand command = new SqlCommand(commandText, connection);
+
+					connection.Open();
+					command.ExecuteNonQuery();
+					connection.Close();
+				}
+				catch (Exception e)
+				{
+					Console.WriteLine(e.Message);
+					return;
+				}
+				Console.WriteLine("Created outage " + points + ":" + startTime + ":" + endTime + ":" + type);
+			}
 		}
 
 
@@ -97,12 +125,18 @@ namespace Server
 							bytes = Encoding.ASCII.GetBytes(Login(input[1], input[2]).ToString());
 							stream.Write(bytes, 0, bytes.Length);
 							break;
+						case "o": //Read outages
+
+							break;
+						case "O": //Write outage
+							CreateOutage(input[2], input[3], input[4], input[5]);
+							break;
 						default:
 							break;
 					}
 
 					data = null;
-					bytes = new Byte[256];
+					bytes = new Byte[2048];
 
 				}
                 Console.WriteLine("Connection closed.");
@@ -119,7 +153,7 @@ namespace Server
 
 				while (true)
 				{
-					Console.Write("Waiting for a connection... ");
+					Console.WriteLine("Waiting for a connection... ");
 					TcpClient client = server.AcceptTcpClient();
 
 					Task task = new Task(action, client);
